@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
+from streamlit_chat import message
 
 # Set up the page layout
 st.set_page_config(layout="wide", page_title="Product Roadmap Planner")
@@ -211,6 +212,6 @@ if user_input:
 # Display chat history
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        st.write(f"**You:** {msg['content']}")
+        message(msg['content'], is_user=True)
     else:
-        st.write(f"**Bot:** {msg['content']}")
+        message(msg['content'], is_user=False)
