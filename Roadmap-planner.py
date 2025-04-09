@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
+from streamlit_chat import message
 
 st.set_page_config(layout="wide", page_title="Product Roadmap Planner")
 
@@ -212,3 +213,28 @@ else:
         file_name="sprint_report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+# === Chatbot Section ===
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+
+def get_chatbot_response(user_input):
+    """Mock function to simulate a chatbot response."""
+    if 'story points' in user_input.lower():
+        return "You can get insights on Story Points for each feature and sprint. Would you like a specific report?"
+    elif 'overdue' in user_input.lower():
+        return "I can help you find overdue features in the roadmap. Would you like to see them?"
+    else:
+        return "I can help you with insights related to the roadmap such as completion rate, story points, or overdue tasks!"
+
+st.subheader("💬 Chat with the Roadmap Assistant")
+user_input = st.text_input("Ask me anything about the roadmap:", "")
+
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    bot_response = get_chatbot_response(user_input)
+    st.session_state.messages.append({"role": "bot", "content": bot_response})
+
+for message in st.session_state.messages:
+    message(message["content"], is_user=(message["role"] == "user"))
+
