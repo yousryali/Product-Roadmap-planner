@@ -4,3 +4,4 @@ plotly
 tabulate
 openpyxl
 xlsxwriter
+streamlit-chat
