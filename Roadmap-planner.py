@@ -3,10 +3,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 from tabulate import tabulate
 import os
+from google.colab import files
+import io
 
-# === Load Excel File ===
-file_path = "/content/sample-data.xlsx"
-xls = pd.ExcelFile(file_path)
+# === Upload Excel File ===
+print("📤 Please upload your Excel file (should include 'Features List' and 'Sprint Definitions' sheets)...")
+uploaded = files.upload()
+file_path = next(iter(uploaded))
+xls = pd.ExcelFile(io.BytesIO(uploaded[file_path]))
+
+# === Load Sheets ===
 features_df = xls.parse('Features List')
 sprints_df = xls.parse('Sprint Definitions')
 
