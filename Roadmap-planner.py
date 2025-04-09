@@ -1,18 +1,24 @@
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from tabulate import tabulate
 import os
-from google.colab import files
-import io
+from tabulate import tabulate
+from io import BytesIO
 
-# === Upload Excel File ===
-print("📤 Please upload your Excel file (should include 'Features List' and 'Sprint Definitions' sheets)...")
-uploaded = files.upload()
-file_path = next(iter(uploaded))
-xls = pd.ExcelFile(io.BytesIO(uploaded[file_path]))
+st.set_page_config(layout="wide", page_title="Product Roadmap Planner")
 
-# === Load Sheets ===
+st.title("📈 Product Roadmap Planner")
+st.markdown("Upload your Excel file (must include sheets: **Features List** and **Sprint Definitions**)")
+
+uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"])
+
+if uploaded_file is None:
+    st.warning("⚠️ Please upload an Excel file to proceed.")
+    st.stop()
+
+# === Read Excel Sheets ===
+xls = pd.ExcelFile(uploaded_file)
 features_df = xls.parse('Features List')
 sprints_df = xls.parse('Sprint Definitions')
 
@@ -41,7 +47,7 @@ features_merged['Feature ID'] = features_merged['Feature ID'].astype(str)
 
 # === Sort by Target Release Version ===
 features_merged['Release Sort'] = features_merged['Target Release'].str.extract(r'(\d+\.\d+\.\d+)')
-features_merged['Release Sort'] = features_merged['Release Sort'].apply(lambda x: tuple(map(int, x.split('.'))))
+features_merged['Release Sort'] = features_merged['Release Sort'].apply(lambda x: tuple(map(int, x.split('.'))) if pd.notnull(x) else (0, 0, 0))
 features_merged.sort_values('Release Sort', inplace=True)
 features_merged.reset_index(drop=True, inplace=True)
 
@@ -56,7 +62,7 @@ fig = px.timeline(
     color_discrete_sequence=px.colors.qualitative.Set1
 )
 
-# === Update X-Axis with Weekly Ticks ===
+# === Weekly Ticks ===
 fig.update_xaxes(
     tickformat="%b %d, %Y",
     tickmode="array",
@@ -67,7 +73,7 @@ fig.update_xaxes(
     )
 )
 
-# === Add Sprint Lines in One Row ===
+# === Sprint Lines ===
 sprint_line_y = len(features_merged) + 2
 sprints_df['Sprint Center'] = sprints_df['Start Date'] + (sprints_df['End Date'] - sprints_df['Start Date']) / 2
 
@@ -76,34 +82,18 @@ for _, row in sprints_df.iterrows():
     x_center = row['Sprint Center']
     y_pos = sprint_line_y
 
-    # Line
-    fig.add_trace(go.Scatter(
-        x=[x0, x1], y=[y_pos, y_pos],
-        mode='lines',
-        line=dict(color='black', width=2),
-        showlegend=False
-    ))
+    fig.add_trace(go.Scatter(x=[x0, x1], y=[y_pos, y_pos], mode='lines',
+                             line=dict(color='black', width=2), showlegend=False))
 
-    # Markers
-    fig.add_trace(go.Scatter(
-        x=[x0, x1], y=[y_pos, y_pos],
-        mode='markers',
-        marker=dict(symbol="triangle-down", size=10, color='black'),
-        showlegend=False
-    ))
+    fig.add_trace(go.Scatter(x=[x0, x1], y=[y_pos, y_pos], mode='markers',
+                             marker=dict(symbol="triangle-down", size=10, color='black'), showlegend=False))
 
-    # Label
-    fig.add_trace(go.Scatter(
-        x=[x_center], y=[y_pos + 0.4],
-        mode='text',
-        text=[row['Sprint Name']],
-        textposition='top center',
-        showlegend=False
-    ))
+    fig.add_trace(go.Scatter(x=[x_center], y=[y_pos + 0.4], mode='text',
+                             text=[row['Sprint Name']], textposition='top center', showlegend=False))
 
-# === Update Layout ===
+# === Layout ===
 fig.update_layout(
-    title='Feature Timeline by Sprint (Sorted by Release)',
+    title='🗓️ Feature Timeline by Sprint (Sorted by Release)',
     xaxis_title='Date',
     yaxis_title='Feature ID',
     yaxis=dict(
@@ -114,7 +104,8 @@ fig.update_layout(
     showlegend=True
 )
 
-fig.show()
+st.subheader("📅 Gantt Chart")
+st.plotly_chart(fig, use_container_width=True)
 
 # === Capacity Check ===
 capacity_check = features_df.groupby('Target Start Sprint')['Story Points'].sum().reset_index()
@@ -126,52 +117,35 @@ capacity_check = capacity_check.merge(
 )
 capacity_check['Over Capacity'] = capacity_check['Story Points'] > capacity_check['Sprint Capacity']
 
-overloaded = capacity_check[capacity_check['Over Capacity']]
-if not overloaded.empty:
-    print("⚠️ Overloaded Sprints:")
-    print(tabulate(overloaded[['Target Start Sprint', 'Story Points', 'Sprint Name', 'Sprint Capacity', 'Over Capacity']], headers='keys', tablefmt='fancy_grid'))
-else:
-    print("✅ All sprints are within capacity.")
-
 # === Sprint Utilization ===
 sprint_utilization = capacity_check.copy()
 sprint_utilization['Utilization (%)'] = (sprint_utilization['Story Points'] / sprint_utilization['Sprint Capacity']) * 100
-print("\n🏃 Sprint Utilization (Percentage of Sprint Capacity Used):")
-print(tabulate(sprint_utilization[['Sprint Name', 'Story Points', 'Sprint Capacity', 'Utilization (%)']], headers='keys', tablefmt='fancy_grid'))
-
-# === Average Story Points Per Sprint ===
-avg_story_points_per_sprint = features_merged.groupby('Target Start Sprint')['Story Points'].sum().mean()
-print(f"\n📊 Average Story Points per Sprint: {avg_story_points_per_sprint:.2f}")
-
-# === Overdue Features ===
-today = pd.to_datetime('today')
-overdue_features = features_merged[(features_merged['Finish'] < today) & (features_merged['Story Points'] > 0)]
-if not overdue_features.empty:
-    print("\n⚠️ Overdue Features:")
-    print(tabulate(overdue_features[['Feature ID', 'Target Release', 'Story Points', 'Finish']], headers='keys', tablefmt='fancy_grid'))
-else:
-    print("✅ No overdue features.")
 
 # === Completion Metrics ===
+today = pd.to_datetime('today')
 completed_features = features_merged[features_merged['Finish'] <= today].copy()
 completed_features['Completed'] = 'Yes'
-
 total_story_points_completed = completed_features['Story Points'].sum()
 total_story_points_planned = features_merged['Story Points'].sum()
 
-print(f"\n📅 Total Story Points Planned: {total_story_points_planned}")
-print(f"✅ Total Story Points Completed: {total_story_points_completed}")
-print(f"📉 Completion Rate: {total_story_points_completed / total_story_points_planned * 100:.2f}%")
+# === Metrics ===
+st.subheader("📊 Metrics")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Story Points Planned", f"{total_story_points_planned:.0f}")
+col2.metric("Completed", f"{total_story_points_completed:.0f}")
+col3.metric("Completion Rate", f"{(total_story_points_completed / total_story_points_planned) * 100:.2f}%")
 
-# === Top 10 Features ===
-top_features = features_merged.nlargest(10, 'Story Points')[['Feature ID', 'Story Points', 'Target Release']]
-print("\n🏆 Top 10 Features by Story Points:")
-print(tabulate(top_features, headers='keys', tablefmt='fancy_grid'))
+# === Overdue Features ===
+overdue_features = features_merged[(features_merged['Finish'] < today) & (features_merged['Story Points'] > 0)]
+if not overdue_features.empty:
+    st.subheader("⚠️ Overdue Features")
+    st.dataframe(overdue_features[['Feature ID', 'Target Release', 'Story Points', 'Finish']])
+else:
+    st.success("✅ No overdue features.")
 
-# === Needed Hours per Sprint (1 Story Point = 5 hours) ===
+# === Needed Hours Chart (1 SP = 5 hours) ===
 capacity_check['Needed Hours'] = capacity_check['Story Points'] * 5
 
-# === Plot Needed Hours Chart ===
 hours_fig = px.bar(
     capacity_check,
     x='Sprint Name',
@@ -182,17 +156,26 @@ hours_fig = px.bar(
     color_discrete_map={True: 'red', False: 'green'}
 )
 hours_fig.update_layout(xaxis_title='Sprint', yaxis_title='Hours', height=500)
-hours_fig.show()
 
-# === Export Chart as Image (after creating directory safely) ===
-os.makedirs("outputs", exist_ok=True)
-hours_fig.write_image("outputs/hours_chart.png")
+st.subheader("📉 Sprint Effort Estimation")
+st.plotly_chart(hours_fig, use_container_width=True)
 
-# === Export Report as Excel ===
-with pd.ExcelWriter("outputs/sprint_report.xlsx") as writer:
+# === Top 10 Features ===
+top_features = features_merged.nlargest(10, 'Story Points')[['Feature ID', 'Story Points', 'Target Release']]
+st.subheader("🏆 Top 10 Features by Story Points")
+st.dataframe(top_features)
+
+# === Excel Report Export (as download button) ===
+output = BytesIO()
+with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     capacity_check.to_excel(writer, sheet_name="Capacity", index=False)
     sprint_utilization.to_excel(writer, sheet_name="Utilization", index=False)
     overdue_features.to_excel(writer, sheet_name="Overdue", index=False)
     top_features.to_excel(writer, sheet_name="Top Features", index=False)
 
-print("📤 Reports exported to 'outputs/' folder.")
+st.download_button(
+    label="📥 Download Sprint Report as Excel",
+    data=output.getvalue(),
+    file_name="sprint_report.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
