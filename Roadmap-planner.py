@@ -18,10 +18,14 @@ if uploaded_file is None:
     st.warning("⚠️ Please upload an Excel file to proceed.")
     st.stop()
 
-# === Read Excel Sheets ===
-xls = pd.ExcelFile(uploaded_file)
-features_df = xls.parse('Features List')
-sprints_df = xls.parse('Sprint Definitions')
+# === Read Excel Sheets with Error Handling ===
+try:
+    xls = pd.ExcelFile(uploaded_file)
+    features_df = xls.parse('Features List')
+    sprints_df = xls.parse('Sprint Definitions')
+except ValueError as e:
+    st.error(f"Error loading sheets: {e}")
+    st.stop()
 
 # === Prepare Dates ===
 sprints_df['Start Date'] = pd.to_datetime(sprints_df['Start Date'], errors='coerce')
