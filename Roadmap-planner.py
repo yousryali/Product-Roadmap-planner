@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
+from datetime import timedelta
 from streamlit_chat import message
 
 # Set up the page layout
@@ -185,37 +186,66 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-# Chatbot functionality
-st.subheader("💬 Chat with the Bot")
+# === Product Tasks Planner ===
+st.subheader("📝 Product Tasks Planner")
 
-# Session state for the chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Function to generate tasks for each product
+def generate_tasks(row):
+    product_version = row['Title']
+    qa_date = row['QA Deployment Date']  # This is 'n'
+    uat_date = row['UAT Deployment Date']
+    prod_date = row['Prod Date']
 
-# Function to handle chat
-def chat_with_bot(user_message):
-    # Add the user message
-    st.session_state.messages.append({"role": "user", "content": user_message})
+    tasks = [
+        {"Task Name": f"{product_version} Initial QA Deployment", "Start Date": qa_date, "Due Date": qa_date},
+        {"Task Name": f"{product_version} Internal DB Scripts Review", "Start Date": qa_date + timedelta(days=4), "Due Date": qa_date + timedelta(days=4)},
+        {"Task Name": f"{product_version} External DB Scripts Review", "Start Date": qa_date + timedelta(days=4), "Due Date": qa_date + timedelta(days=4)},
+        {"Task Name": f"{product_version} CAB", "Start Date": qa_date + timedelta(days=4), "Due Date": qa_date + timedelta(days=4)},
+        {"Task Name": f"{product_version} Prod Prep", "Start Date": qa_date + timedelta(days=5), "Due Date": qa_date + timedelta(days=5)},
+        {"Task Name": f"{product_version} Initial UAT Deployment", "Start Date": uat_date, "Due Date": uat_date},
+        {"Task Name": f"{product_version} Prod Deployment", "Start Date": prod_date, "Due Date": qa_date}
+    ]
 
-    # Simple hardcoded response
-    if "roadmap" in user_message.lower():
-        return "I can help you with your roadmap. Let me know what insights you need!"
-    elif "overdue" in user_message.lower():
-        return "You have the following overdue features: " + ", ".join(overdue_features['Feature ID'].tolist())
-    else:
-        return "I'm here to help! Ask me anything related to your roadmap."
+    for task in tasks:
+        task["Duration (Days)"] = (task["Start Date"] - task["Due Date"]).days
 
-# Get user input
-user_input = st.text_input("Ask the bot anything about your roadmap:")
+    return tasks
 
-# If the user sends a message
-if user_input:
-    bot_response = chat_with_bot(user_input)
-    st.session_state.messages.append({"role": "bot", "content": bot_response})
+# File upload section for product tasks
+uploaded_file_tasks = st.file_uploader("Upload an Excel file for Product Tasks", type=["xlsx"])
 
-# Display chat history
-for msg in st.session_state.messages:
-    if msg["role"] == "user":
-        message(msg['content'], is_user=True)
-    else:
-        message(msg['content'], is_user=False)
+if uploaded_file_tasks is not None:
+    # Load the Excel file for product tasks
+    df_tasks = pd.read_excel(uploaded_file_tasks)
+
+    # Ensure the date columns are in datetime format
+    df_tasks['QA Deployment Date'] = pd.to_datetime(df_tasks['QA Deployment Date'], errors='coerce')
+    df_tasks['UAT Deployment Date'] = pd.to_datetime(df_tasks['UAT Deployment Date'], errors='coerce')
+    df_tasks['Prod Date'] = pd.to_datetime(df_tasks['Prod Date'], errors='coerce')
+
+    # Extract Product Name
+    df_tasks['Product'] = df_tasks['Title'].apply(lambda x: str(x).split()[0] if pd.notna(x) else "Unknown")
+
+    # Button to generate tasks
+    if st.button("Generate Tasks for Products"):
+        # Create an Excel file to save the tasks
+        task_data = []
+        for product in df_tasks['Product'].unique():
+            product_df = df_tasks[df_tasks['Product'] == product]
+            for _, row in product_df.iterrows():
+                task_data.extend(generate_tasks(row))
+
+        task_df = pd.DataFrame(task_data)
+        st.write("Task Planner", task_df)
+
+        # Create download button for the new task file
+        task_output = BytesIO()
+        with pd.ExcelWriter(task_output, engine='xlsxwriter') as writer:
+            task_df.to_excel(writer, sheet_name="Product Tasks", index=False)
+
+        st.download_button(
+            label="Download Product Task Planner",
+            data=task_output.getvalue(),
+            file_name="product_task_planner.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
