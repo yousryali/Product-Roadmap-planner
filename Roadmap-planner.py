@@ -7,13 +7,12 @@ from datetime import timedelta
 from streamlit_chat import message
 
 # Set up the page layout
-st.set_page_config(layout="wide", page_title="Product Roadmap Planner")
+st.set_page_config(layout="wide", page_title="Product Roadmap and Task Planner")
 
-st.title("📈 Product Roadmap Planner")
-st.markdown("Upload your Excel file (must include sheets: **Features List** and **Sprint Definitions**)")
+st.title("📈 Product Roadmap and Task Planner")
 
-# Upload the file
-uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"])
+# Upload the file for both tasks and roadmap
+uploaded_file = st.file_uploader("Choose an Excel file (must include sheets: **Features List** and **Sprint Definitions**)", type=["xlsx"])
 
 if uploaded_file is None:
     st.warning("⚠️ Please upload an Excel file to proceed.")
